@@ -1,0 +1,1 @@
+export { Dummy } from 'root/store/Dummy';
