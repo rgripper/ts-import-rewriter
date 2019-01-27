@@ -21,7 +21,7 @@ function getTsConfig(directoryPath: string, configFileName: string) {
 export function compileAndRewrite(
   directoryPath: string,
   configFileName: string
-) {
+): void {
   const tsConfig = getTsConfig(directoryPath, configFileName);
 
   const compilerHost = ts.createCompilerHost(tsConfig.options);
