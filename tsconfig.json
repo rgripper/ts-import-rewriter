@@ -15,7 +15,6 @@
     "noUnusedParameters": true,
 
     "resolveJsonModule": true,
-    "isolatedModules": true,
     "esModuleInterop": true
   },
   "files": ["src/index.ts"]

@@ -6,7 +6,7 @@
     },
     "declaration": true,
     "declarationDir": "decl",
-    "outDir": "build/dist",
+    "outDir": "dist",
     "module": "commonjs",
     "target": "es5",
     "lib": ["es6", "dom"],

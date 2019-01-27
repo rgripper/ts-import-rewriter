@@ -2,23 +2,23 @@ import * as ts from "typescript";
 import {
   transformDts as dtsPathTransform,
   Opts as PathTransformOpts
-} from "ts-transform-import-path-rewrite";
+} from "./transform";
 import { resolveModuleName, getParsedCommandLineOfConfigFile } from "typescript";
 
-function getTsConfig (directoryPath: string, configFileName: string) {
+function getTsConfig(directoryPath: string, configFileName: string) {
   const parseConfigHost: ts.ParseConfigFileHost = {
     fileExists: ts.sys.fileExists,
     readFile: ts.sys.readFile,
     readDirectory: ts.sys.readDirectory,
-    getCurrentDirectory: () => directoryPath, 
-    onUnRecoverableConfigFileDiagnostic: () => {}, // TODO
+    getCurrentDirectory: () => directoryPath,
+    onUnRecoverableConfigFileDiagnostic: () => { }, // TODO
     useCaseSensitiveFileNames: true
   };
 
   return getParsedCommandLineOfConfigFile(configFileName, {}, parseConfigHost)!;
 }
 
-export function compile(
+export function compileAndRewrite(
   directoryPath: string,
   configFileName: string
 ) {
@@ -26,7 +26,7 @@ export function compile(
 
   const compilerHost = ts.createCompilerHost(tsConfig.options);
   const resolveModuleNameInFile = (moduleName: string, containingFile: string) => resolveModuleName(moduleName, containingFile, tsConfig.options, compilerHost).resolvedModule!.resolvedFileName;
-  
+
   const program = ts.createProgram(tsConfig.fileNames, tsConfig.options, compilerHost);
   const trOpts: PathTransformOpts = {
     projectBaseDir: directoryPath,
