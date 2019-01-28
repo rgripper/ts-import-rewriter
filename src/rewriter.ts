@@ -1,72 +1,47 @@
-import * as ts from "typescript";
-import {
-  transformDts,
-  Opts as PathTransformOpts
-} from "./transform";
-import { resolveModuleName, getParsedCommandLineOfConfigFile } from "typescript";
-import path from 'path';
+/**
+ * TODO
+ */
+import * as ts from 'typescript';
 
-function getTsConfig(directoryPath: string, configFileName: string) {
-  const parseConfigHost: ts.ParseConfigFileHost = {
-    fileExists: ts.sys.fileExists,
-    readFile: ts.sys.readFile,
-    readDirectory: ts.sys.readDirectory,
-    getCurrentDirectory: () => directoryPath,
-    onUnRecoverableConfigFileDiagnostic: () => { }, // TODO
-    useCaseSensitiveFileNames: true
-  };
+export type ModuleResolver = (moduleName: string, containingFile: string) => string | undefined;
+type ImportRewriter = (node: ts.ImportDeclaration) => ts.ImportDeclaration;
 
-  return getParsedCommandLineOfConfigFile(configFileName, {}, parseConfigHost)!;
+export function rewriteImports(moduleResolver: ModuleResolver): ts.TransformerFactory<ts.SourceFile> {
+  return (ctx: ts.TransformationContext): ts.Transformer<ts.SourceFile> => {
+    return (sf: ts.SourceFile) => {
+      const rewriteImport: ImportRewriter = importNode => rewriteImportWithResolver(importNode, moduleResolver);
+      const visitor = createVisitor(ctx, rewriteImport);
+      return ts.visitNode(sf, visitor);
+    }
+  }
 }
 
-function getCommonRoot(fileNames: string[]): string {
-  const rootChars: string[] = [];
-  for (let i = 0; ; i++) {
-    const lastChar = fileNames.map(x => x[i] as string | undefined).reduce((a, b) => a === b ? a : undefined);
-    if (lastChar == undefined) {
-      break;
-    }
+function rewriteImportWithResolver(importNode: ts.ImportDeclaration, moduleResolver: ModuleResolver): ts.ImportDeclaration {
+  const sourceFile = importNode.getSourceFile();
+  const importPathWithQuotes = importNode.moduleSpecifier.getText(sourceFile);
+  const originalPath = importPathWithQuotes.substr(1, importPathWithQuotes.length - 2);
+  const rewrittenPath = moduleResolver(originalPath, sourceFile.fileName);
 
-    rootChars.push(lastChar);
+  if (rewrittenPath === undefined) {
+    return importNode;
   }
 
-  return rootChars.join('');
+  return ts.createImportDeclaration(
+    undefined,
+    undefined,
+    importNode.importClause,
+    ts.createLiteral(rewrittenPath)
+  )
 }
 
-export function compileAndRewrite(
-  directoryPath: string,
-  configFileName: string
-): void {
-  const tsConfig = getTsConfig(directoryPath, configFileName);
+function createVisitor(ctx: ts.TransformationContext, createResolvedImport: ImportRewriter): ts.Visitor {
+  const visitor: ts.Visitor = (node: ts.Node): ts.Node => {
+    if (node.kind === ts.SyntaxKind.ImportDeclaration) {
+      return createResolvedImport(node as ts.ImportDeclaration);
+    }
+    return ts.visitEachChild(node, visitor, ctx);
+  }
 
-  const compilerHost = ts.createCompilerHost(tsConfig.options);
-  const resolveModuleNameInFile = (moduleName: string, containingFile: string) => resolveModuleName(moduleName, containingFile, tsConfig.options, compilerHost).resolvedModule!.resolvedFileName;
-  
-  const sourceDirectory = getCommonRoot(tsConfig.fileNames);
-  const getRelativePath = (absolutePath: string) => path.relative(absolutePath, sourceDirectory);
-  const rewritePath = (moduleName: string, containingFile: string) => getRelativePath(resolveModuleNameInFile(moduleName, containingFile));
-
-  const program = ts.createProgram(tsConfig.fileNames, tsConfig.options, compilerHost);
-  const trOpts: PathTransformOpts = {
-    projectBaseDir: directoryPath,
-    rewrite: resolveModuleNameInFile
-  };
-  let emitResult = program.emit(undefined, undefined, undefined, undefined, {
-    after: [transformDts(trOpts, rewritePath) as ts.TransformerFactory<ts.SourceFile>],
-    afterDeclarations: [transformDts(trOpts, rewritePath) as any]
-  });
-
-  const allDiagnostics = ts
-    .getPreEmitDiagnostics(program)
-    .concat(emitResult.diagnostics);
-
-  allDiagnostics.filter(x => x.file !== undefined).forEach(diagnostic => {
-    const { line, character } = diagnostic.file!.getLineAndCharacterOfPosition(
-      diagnostic.start!
-    );
-    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
-    console.log(
-      `${diagnostic.file!.fileName} (${line + 1},${character + 1}): ${message}`
-    );
-  });
+  return visitor;
 }
+

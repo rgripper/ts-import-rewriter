@@ -1,1 +1,1 @@
-export { compileAndRewrite } from './rewriter';
+export { compileAndRewrite } from './compiler';
