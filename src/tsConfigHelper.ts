@@ -1,4 +1,5 @@
 import ts from "typescript";
+import path from 'path';
 
 export function getTsConfig(directoryPath: string, configFileName: string) {
   const parseConfigHost: ts.ParseConfigFileHost = {
@@ -24,5 +25,5 @@ export function getCommonRoot(fileNames: string[]): string {
     rootChars.push(lastChar);
   }
 
-  return rootChars.join('');
+  return path.dirname(rootChars.join(''));
 }

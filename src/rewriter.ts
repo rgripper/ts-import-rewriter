@@ -9,6 +9,7 @@ type ImportRewriter = (node: ts.ImportDeclaration) => ts.ImportDeclaration;
 export function rewriteImports(moduleResolver: ModuleResolver): ts.TransformerFactory<ts.SourceFile> {
   return (ctx: ts.TransformationContext): ts.Transformer<ts.SourceFile> => {
     return (sf: ts.SourceFile) => {
+      console.log('source', sf);
       const rewriteImport: ImportRewriter = importNode => rewriteImportWithResolver(importNode, moduleResolver);
       const visitor = createVisitor(ctx, rewriteImport);
       return ts.visitNode(sf, visitor);
