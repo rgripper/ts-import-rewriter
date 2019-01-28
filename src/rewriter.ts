@@ -1,9 +1,10 @@
 import * as ts from "typescript";
 import {
-  transformDts as dtsPathTransform,
+  transformDts,
   Opts as PathTransformOpts
 } from "./transform";
 import { resolveModuleName, getParsedCommandLineOfConfigFile } from "typescript";
+import path from 'path';
 
 function getTsConfig(directoryPath: string, configFileName: string) {
   const parseConfigHost: ts.ParseConfigFileHost = {
@@ -18,6 +19,20 @@ function getTsConfig(directoryPath: string, configFileName: string) {
   return getParsedCommandLineOfConfigFile(configFileName, {}, parseConfigHost)!;
 }
 
+function getCommonRoot(fileNames: string[]): string {
+  const rootChars: string[] = [];
+  for (let i = 0; ; i++) {
+    const lastChar = fileNames.map(x => x[i] as string | undefined).reduce((a, b) => a === b ? a : undefined);
+    if (lastChar == undefined) {
+      break;
+    }
+
+    rootChars.push(lastChar);
+  }
+
+  return rootChars.join('');
+}
+
 export function compileAndRewrite(
   directoryPath: string,
   configFileName: string
@@ -26,6 +41,10 @@ export function compileAndRewrite(
 
   const compilerHost = ts.createCompilerHost(tsConfig.options);
   const resolveModuleNameInFile = (moduleName: string, containingFile: string) => resolveModuleName(moduleName, containingFile, tsConfig.options, compilerHost).resolvedModule!.resolvedFileName;
+  
+  const sourceDirectory = getCommonRoot(tsConfig.fileNames);
+  const getRelativePath = (absolutePath: string) => path.relative(absolutePath, sourceDirectory);
+  const rewritePath = (moduleName: string, containingFile: string) => getRelativePath(resolveModuleNameInFile(moduleName, containingFile));
 
   const program = ts.createProgram(tsConfig.fileNames, tsConfig.options, compilerHost);
   const trOpts: PathTransformOpts = {
@@ -33,8 +52,8 @@ export function compileAndRewrite(
     rewrite: resolveModuleNameInFile
   };
   let emitResult = program.emit(undefined, undefined, undefined, undefined, {
-    after: [dtsPathTransform(trOpts) as ts.TransformerFactory<ts.SourceFile>],
-    afterDeclarations: [dtsPathTransform(trOpts) as any]
+    after: [transformDts(trOpts, rewritePath) as ts.TransformerFactory<ts.SourceFile>],
+    afterDeclarations: [transformDts(trOpts, rewritePath) as any]
   });
 
   const allDiagnostics = ts
