@@ -1,7 +1,7 @@
 import ts from "typescript";
 import path from 'path';
 
-export function getTsConfig(directoryPath: string, configFileName: string) {
+export function getTsConfig(directoryPath: string, configFileName: string): ts.ParsedCommandLine | undefined {
   const parseConfigHost: ts.ParseConfigFileHost = {
     fileExists: ts.sys.fileExists,
     readFile: ts.sys.readFile,
@@ -11,19 +11,6 @@ export function getTsConfig(directoryPath: string, configFileName: string) {
     useCaseSensitiveFileNames: true
   };
 
-  return ts.getParsedCommandLineOfConfigFile(configFileName, {}, parseConfigHost)!;
-}
-
-export function getCommonRoot(fileNames: string[]): string {
-  const rootChars: string[] = [];
-  for (let i = 0; ; i++) {
-    const lastChar = fileNames.map(x => x[i] as string | undefined).reduce((a, b) => a === b ? a : undefined);
-    if (lastChar == undefined) {
-      break;
-    }
-
-    rootChars.push(lastChar);
-  }
-
-  return path.dirname(rootChars.join(''));
+  const absoluteConfigFileName = path.resolve(directoryPath, configFileName);
+  return ts.getParsedCommandLineOfConfigFile(absoluteConfigFileName, {}, parseConfigHost);
 }

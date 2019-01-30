@@ -5,13 +5,18 @@ import {
 } from "./rewriter";
 import { resolveModuleName } from "typescript";
 import path from 'path';
-import { getTsConfig, getCommonRoot } from "./tsConfigHelper";
+import { getTsConfig } from "./tsConfigHelper";
 
 export function compileAndRewrite(
   directoryPath: string,
   configFileName: string
 ): void {
   const tsConfig = getTsConfig(directoryPath, configFileName);
+  if (tsConfig === undefined) {
+    console.error('No config file found');
+    return;
+  }
+  console.log(tsConfig.options);
   return compileAndRewriteWithOptions(tsConfig.fileNames, tsConfig.options);
 }
 
@@ -20,17 +25,16 @@ export function compileAndRewriteWithOptions(
   options: ts.CompilerOptions
 ): void {
   const compilerHost = ts.createCompilerHost(options);
-  console.debug(fileNames);
   if (fileNames.length === 0) {
     console.info('No files to compile');
     return;
   }
-  const moduleResolver = createModuleResolver(fileNames, options, compilerHost);
+  const moduleResolver = createModuleResolver(options, compilerHost);
   const program = ts.createProgram(fileNames, options, compilerHost);
 
   const emitResult = program.emit(undefined, undefined, undefined, undefined, {
-    after: [rewriteImports(moduleResolver) as ts.TransformerFactory<ts.SourceFile>],
-    afterDeclarations: [rewriteImports(moduleResolver) as any]
+    after: [rewriteImports(moduleResolver)],
+    afterDeclarations: [rewriteImports(moduleResolver) as ts.TransformerFactory<ts.SourceFile | ts.Bundle>]
   });
 
   const allDiagnostics = ts
@@ -48,11 +52,18 @@ export function compileAndRewriteWithOptions(
   });
 }
 
-const createModuleResolver = (fileNames: string[], compilerOptions: ts.CompilerOptions, compilerHost: ts.CompilerHost): ModuleResolver => {
+const createModuleResolver = (compilerOptions: ts.CompilerOptions, compilerHost: ts.CompilerHost): ModuleResolver => {
   return (moduleName, containingFile) => {
-    const sourceDirectory = getCommonRoot(fileNames);
-    const resolution = resolveModuleName(moduleName, containingFile, compilerOptions, compilerHost);
-    const absolutePath = resolution && resolution.resolvedModule && resolution.resolvedModule.resolvedFileName;
-    return absolutePath && path.relative(absolutePath, sourceDirectory);
+    const { resolvedModule } = resolveModuleName(moduleName, containingFile, compilerOptions, compilerHost);
+    if (resolvedModule === undefined || resolvedModule.isExternalLibraryImport) {
+      return moduleName;
+    }
+
+    const absolutePath = resolvedModule.resolvedFileName;
+    const relativePath = path.relative(compilerOptions.rootDir!, absolutePath); // TODO: root dir
+    const relativeModuleName = relativePath.substring(0, relativePath.length - resolvedModule.extension.length);
+    const posixRelativeModuleName = './' + relativeModuleName.split(path.win32.sep).join(path.posix.sep);
+    
+    return posixRelativeModuleName;
   }
 }
